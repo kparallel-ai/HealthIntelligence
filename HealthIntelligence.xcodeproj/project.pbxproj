@@ -257,6 +257,8 @@
 				DEVELOPMENT_TEAM = 6GMW65SR97;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Health Intelligence";
+				INFOPLIST_KEY_CFBundleName = "Health Intelligence";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Health Intelligence reads your heart rate, sleep, and activity data from Apple Health to show insights based on your personal baselines. Your data stays on this device.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -291,6 +293,8 @@
 				DEVELOPMENT_TEAM = 6GMW65SR97;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Health Intelligence";
+				INFOPLIST_KEY_CFBundleName = "Health Intelligence";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Health Intelligence reads your heart rate, sleep, and activity data from Apple Health to show insights based on your personal baselines. Your data stays on this device.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
