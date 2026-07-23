@@ -61,23 +61,33 @@ final class DashboardViewModel {
 
             async let restingHRToday = healthKitService.restingHeartRateSamples(from: startOfToday, to: now)
             async let restingHRBaseline = healthKitService.restingHeartRateSamples(from: baselineStart, to: startOfToday)
+            async let heartRateToday = healthKitService.heartRateSamples(from: startOfToday, to: now)
+            async let workoutsToday = healthKitService.workouts(from: startOfToday, to: now)
             async let stepsToday = healthKitService.stepSamples(from: startOfToday, to: now)
             async let stepsBaseline = healthKitService.stepSamples(from: baselineStart, to: startOfToday)
             async let activeEnergyToday = healthKitService.activeEnergySamples(from: startOfToday, to: now)
             async let sleepSessions = healthKitService.sleepSessions(from: sleepWindowStart, to: now)
 
-            let (rhrToday, rhrBaseline, todaySteps, baselineSteps, todayActiveEnergy, sessions) = try await (
-                restingHRToday, restingHRBaseline, stepsToday, stepsBaseline, activeEnergyToday, sleepSessions
+            let (rhrToday, rhrBaseline, hrToday, workouts, todaySteps, baselineSteps, todayActiveEnergy, sessions) = try await (
+                restingHRToday, restingHRBaseline, heartRateToday, workoutsToday, stepsToday, stepsBaseline, activeEnergyToday, sleepSessions
             )
 
-            if rhrToday.isEmpty && todaySteps.isEmpty && sessions.isEmpty {
+            if rhrToday.isEmpty && hrToday.isEmpty && todaySteps.isEmpty && sessions.isEmpty {
                 state = .noData
                 return
             }
 
             let strain = analyzer.analyzeStrain(
                 todayRestingHeartRate: rhrToday.last,
-                baselineRestingHeartRateSamples: rhrBaseline
+                baselineRestingHeartRateSamples: rhrBaseline,
+                todayHeartRateSamples: hrToday,
+                todayWorkouts: workouts,
+                age: healthKitService.age(),
+                biologicalSex: healthKitService.biologicalSex(),
+                // No source for a directly measured max HR yet, so the
+                // calculator falls back to the age-based estimate — see
+                // TRIMPStrainCalculator.
+                measuredMaximumHeartRate: nil
             )
             let sleep = analyzer.analyzeSleep(mostRecentSession: sessions.last)
             let activity = analyzer.analyzeActivity(

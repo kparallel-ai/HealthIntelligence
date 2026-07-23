@@ -12,12 +12,14 @@
 //  appears from heart rate and activity load alone) is what the available
 //  data can actually support.
 //
-//  This file currently only establishes the output shapes and the two or
-//  three calculations simple enough to be unambiguously correct (averages,
-//  percentage deviation from a personal baseline). The real Strain/Sleep/
-//  Activity scoring models — rolling baselines, trend detection, sleep
-//  fragmentation, recent load — are future work and should slot into the
-//  `analyze...` functions below without changing their signatures.
+//  Strain has a real scoring model: a TRIMP (Training Impulse) calculation
+//  over non-workout heart-rate samples — see TRIMPStrainCalculator.swift for
+//  the full derivation. Deliberately no HRV. Sleep and Activity still only
+//  have the output shapes and a couple of unambiguously-correct calculations
+//  (averages, percentage deviation from a personal baseline); their scoring
+//  models — sleep fragmentation, trend detection, recent load — are future
+//  work and should slot into the `analyze...` functions below without
+//  changing their signatures.
 //
 
 import Foundation
@@ -25,13 +27,21 @@ import Foundation
 // MARK: - Analysis outputs
 
 struct StrainAnalysis {
+    // Resting heart rate vs. the user's rolling personal baseline. A simple
+    // factual comparison, independent of the TRIMP score below (which uses
+    // the baseline directly, not today's RHR — see TRIMPStrainCalculator).
     let restingHeartRate: Double?
     let baselineRestingHeartRate: Double?
     let percentageDeviationFromBaseline: Double?
 
-    // Future: recent physical load (active energy trend), elevated
-    // non-exercise heart rate, and a combined strain score derived from
-    // deviation across multiple signals rather than resting HR alone.
+    // Workouts in the analysis window. Their heart-rate samples are
+    // excluded from the TRIMP calculation below — elevated HR during a
+    // workout is expected physical workload, not the sustained
+    // resting-state strain this score targets.
+    let workouts: [Workout]
+
+    // TRIMP-based cardiovascular Strain Score (Banister model), 0...100.
+    let strain: StrainScoreResult
 }
 
 struct SleepAnalysis {
@@ -59,14 +69,35 @@ struct ActivityAnalysis {
 struct HealthAnalyzer {
     func analyzeStrain(
         todayRestingHeartRate: HealthMetricSample?,
-        baselineRestingHeartRateSamples: [HealthMetricSample]
+        baselineRestingHeartRateSamples: [HealthMetricSample],
+        todayHeartRateSamples: [HealthMetricSample],
+        todayWorkouts: [Workout],
+        age: Int?,
+        biologicalSex: BiologicalSex,
+        measuredMaximumHeartRate: Double?,
+        strainCalculator: TRIMPStrainCalculator = TRIMPStrainCalculator()
     ) -> StrainAnalysis {
         let baseline = Self.average(baselineRestingHeartRateSamples.map(\.value))
         let today = todayRestingHeartRate?.value
+
+        let nonWorkoutSamples = todayHeartRateSamples.filter { sample in
+            !todayWorkouts.contains { $0.contains(sample.startDate) }
+        }
+
+        let strainResult = strainCalculator.calculate(
+            heartRateSamples: nonWorkoutSamples,
+            restingHeartRateBaseline: baseline,
+            age: age,
+            sex: biologicalSex,
+            measuredMaximumHeartRate: measuredMaximumHeartRate
+        )
+
         return StrainAnalysis(
             restingHeartRate: today,
             baselineRestingHeartRate: baseline,
-            percentageDeviationFromBaseline: Self.percentageDeviation(value: today, from: baseline)
+            percentageDeviationFromBaseline: Self.percentageDeviation(value: today, from: baseline),
+            workouts: todayWorkouts,
+            strain: strainResult
         )
     }
 

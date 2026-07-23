@@ -8,6 +8,7 @@
 
 /* Begin PBXFileReference section */
 		F6188B3A300A9ABB00CB2D77 /* HealthIntelligence.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HealthIntelligence.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F6188C00300A9ABB00CB2D01 /* HealthIntelligenceTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HealthIntelligenceTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -16,10 +17,22 @@
 			path = HealthIntelligence;
 			sourceTree = "<group>";
 		};
+		F6188C00300A9ABB00CB2D02 /* HealthIntelligenceTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = HealthIntelligenceTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		F6188B37300A9ABB00CB2D77 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F6188C00300A9ABB00CB2D05 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -33,6 +46,7 @@
 			isa = PBXGroup;
 			children = (
 				F6188B3C300A9ABB00CB2D77 /* HealthIntelligence */,
+				F6188C00300A9ABB00CB2D02 /* HealthIntelligenceTests */,
 				F6188B3B300A9ABB00CB2D77 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -41,6 +55,7 @@
 			isa = PBXGroup;
 			children = (
 				F6188B3A300A9ABB00CB2D77 /* HealthIntelligence.app */,
+				F6188C00300A9ABB00CB2D01 /* HealthIntelligenceTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -70,7 +85,48 @@
 			productReference = F6188B3A300A9ABB00CB2D77 /* HealthIntelligence.app */;
 			productType = "com.apple.product-type.application";
 		};
+		F6188C00300A9ABB00CB2D03 /* HealthIntelligenceTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F6188C00300A9ABB00CB2D0B /* Build configuration list for PBXNativeTarget "HealthIntelligenceTests" */;
+			buildPhases = (
+				F6188C00300A9ABB00CB2D04 /* Sources */,
+				F6188C00300A9ABB00CB2D05 /* Frameworks */,
+				F6188C00300A9ABB00CB2D06 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				F6188C00300A9ABB00CB2D07 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				F6188C00300A9ABB00CB2D02 /* HealthIntelligenceTests */,
+			);
+			name = HealthIntelligenceTests;
+			packageProductDependencies = (
+			);
+			productName = HealthIntelligenceTests;
+			productReference = F6188C00300A9ABB00CB2D01 /* HealthIntelligenceTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
+
+/* Begin PBXContainerItemProxy section */
+		F6188C00300A9ABB00CB2D08 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = F6188B32300A9ABB00CB2D77 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F6188B39300A9ABB00CB2D77;
+			remoteInfo = HealthIntelligence;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXTargetDependency section */
+		F6188C00300A9ABB00CB2D07 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F6188B39300A9ABB00CB2D77 /* HealthIntelligence */;
+			targetProxy = F6188C00300A9ABB00CB2D08 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXProject section */
 		F6188B32300A9ABB00CB2D77 /* Project object */ = {
@@ -82,6 +138,10 @@
 				TargetAttributes = {
 					F6188B39300A9ABB00CB2D77 = {
 						CreatedOnToolsVersion = 26.6;
+					};
+					F6188C00300A9ABB00CB2D03 = {
+						CreatedOnToolsVersion = 26.6;
+						TestTargetID = F6188B39300A9ABB00CB2D77;
 					};
 				};
 			};
@@ -100,6 +160,7 @@
 			projectRoot = "";
 			targets = (
 				F6188B39300A9ABB00CB2D77 /* HealthIntelligence */,
+				F6188C00300A9ABB00CB2D03 /* HealthIntelligenceTests */,
 			);
 		};
 /* End PBXProject section */
@@ -112,10 +173,24 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		F6188C00300A9ABB00CB2D06 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		F6188B36300A9ABB00CB2D77 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F6188C00300A9ABB00CB2D04 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -318,6 +393,46 @@
 			};
 			name = Release;
 		};
+		F6188C00300A9ABB00CB2D09 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6GMW65SR97;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = Personal.HealthIntelligenceTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/HealthIntelligence.app/HealthIntelligence";
+			};
+			name = Debug;
+		};
+		F6188C00300A9ABB00CB2D0A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6GMW65SR97;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = Personal.HealthIntelligenceTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/HealthIntelligence.app/HealthIntelligence";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -335,6 +450,15 @@
 			buildConfigurations = (
 				F6188B46300A9ACD00CB2D77 /* Debug */,
 				F6188B47300A9ACD00CB2D77 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		F6188C00300A9ABB00CB2D0B /* Build configuration list for PBXNativeTarget "HealthIntelligenceTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F6188C00300A9ABB00CB2D09 /* Debug */,
+				F6188C00300A9ABB00CB2D0A /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

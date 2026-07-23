@@ -43,16 +43,21 @@ final class HealthKitService {
     func requestAuthorization() async throws {
         guard isHealthDataAvailable else { throw HealthKitServiceError.notAvailable }
 
-        let readTypes = Set(
-            [
-                HKObjectType.quantityType(forIdentifier: .heartRate),
-                HKObjectType.quantityType(forIdentifier: .restingHeartRate),
-                HKObjectType.quantityType(forIdentifier: .stepCount),
-                HKObjectType.quantityType(forIdentifier: .activeEnergyBurned),
-                HKObjectType.quantityType(forIdentifier: .basalEnergyBurned),
-                HKObjectType.categoryType(forIdentifier: .sleepAnalysis),
-            ].compactMap { $0 }
-        )
+        // Explicitly typed as [HKObjectType?] so HKObjectType.workoutType()
+        // (non-optional) and the forIdentifier: lookups (optional) unify
+        // into one array without fragile literal-inference surprises.
+        let candidateTypes: [HKObjectType?] = [
+            HKObjectType.quantityType(forIdentifier: .heartRate),
+            HKObjectType.quantityType(forIdentifier: .restingHeartRate),
+            HKObjectType.quantityType(forIdentifier: .stepCount),
+            HKObjectType.quantityType(forIdentifier: .activeEnergyBurned),
+            HKObjectType.quantityType(forIdentifier: .basalEnergyBurned),
+            HKObjectType.categoryType(forIdentifier: .sleepAnalysis),
+            HKObjectType.characteristicType(forIdentifier: .dateOfBirth),
+            HKObjectType.characteristicType(forIdentifier: .biologicalSex),
+            HKObjectType.workoutType(),
+        ]
+        let readTypes = Set(candidateTypes.compactMap { $0 })
 
         _ = try await healthStore.requestAuthorization(toShare: [], read: readTypes)
     }
@@ -193,6 +198,60 @@ final class HealthKitService {
 
         return sessions.map { SleepSession(segments: $0) }
     }
+
+    // MARK: - Workouts
+
+    /// Fetches workouts in the given range so the analyzer can exclude their
+    /// heart-rate samples from the non-exercise strain signal.
+    func workouts(from start: Date, to end: Date) async throws -> [Workout] {
+        let predicate = HKQuery.predicateForSamples(withStart: start, end: end, options: .strictStartDate)
+        let descriptor = HKSampleQueryDescriptor(
+            predicates: [.workout(predicate)],
+            sortDescriptors: [SortDescriptor(\.startDate, order: .forward)]
+        )
+
+        let samples = try await descriptor.result(for: healthStore)
+        let energyType = HKObjectType.quantityType(forIdentifier: .activeEnergyBurned)
+
+        return samples.map { workout in
+            Workout(
+                activityName: workout.workoutActivityType.displayName,
+                startDate: workout.startDate,
+                endDate: workout.endDate,
+                totalActiveEnergyBurned: energyType.flatMap {
+                    workout.statistics(for: $0)?.sumQuantity()?.doubleValue(for: .kilocalorie())
+                },
+                source: HealthSource(sample: workout)
+            )
+        }
+    }
+
+    // MARK: - Characteristic data
+
+    /// The user's age in whole years, from HealthKit's characteristic data
+    /// (date of birth, set in the Health app's profile). `nil` if
+    /// unavailable or unauthorized — callers should treat that as "estimate
+    /// max heart rate conservatively," not crash or guess silently.
+    func age() -> Int? {
+        guard let birthDateComponents = try? healthStore.dateOfBirthComponents(),
+            let birthYear = birthDateComponents.year else { return nil }
+
+        let age = Calendar.current.component(.year, from: Date()) - birthYear
+        return age > 0 ? age : nil
+    }
+
+    /// The user's biological sex from HealthKit's characteristic data (set
+    /// in the Health app's profile). Used only to select the Banister TRIMP
+    /// exponent constant in the Strain calculation.
+    func biologicalSex() -> BiologicalSex {
+        guard let sex = try? healthStore.biologicalSex().biologicalSex else { return .unspecified }
+        switch sex {
+        case .male: return .male
+        case .female: return .female
+        case .other, .notSet: return .unspecified
+        @unknown default: return .unspecified
+        }
+    }
 }
 
 // MARK: - HealthKit -> app model conversions
@@ -217,6 +276,31 @@ private extension SleepStage {
         case .asleepREM: self = .rem
         case .asleepUnspecified: self = .unspecified
         @unknown default: self = .unspecified
+        }
+    }
+}
+
+private extension HKWorkoutActivityType {
+    /// A short, readable label for common activity types. HealthKit doesn't
+    /// provide one itself, and the identifier list spans 100+ cases across
+    /// OS versions — this covers the common ones and falls back to a
+    /// generic label for the rest, including whatever Garmin's HealthKit
+    /// writer maps its own activity types to (not publicly documented).
+    var displayName: String {
+        switch self {
+        case .running: "Running"
+        case .walking: "Walking"
+        case .cycling: "Cycling"
+        case .swimming: "Swimming"
+        case .hiking: "Hiking"
+        case .traditionalStrengthTraining, .functionalStrengthTraining: "Strength Training"
+        case .yoga: "Yoga"
+        case .coreTraining: "Core Training"
+        case .elliptical: "Elliptical"
+        case .rowing: "Rowing"
+        case .stairClimbing: "Stair Climbing"
+        case .highIntensityIntervalTraining: "HIIT"
+        default: "Workout"
         }
     }
 }

@@ -110,6 +110,29 @@ private struct StrainCard: View {
 
     var body: some View {
         DimensionCard(title: "Strain", symbol: "bolt.heart", tint: .orange) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(analysis.strain.strainScore, format: .number.precision(.fractionLength(1)))
+                    .font(.system(size: 34, weight: .bold, design: .rounded))
+                Text("/ 100")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                if analysis.strain.confidence == .low {
+                    Text("Low Confidence")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.orange)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(.orange.opacity(0.15), in: Capsule())
+                }
+            }
+            MetricRow(label: "Total TRIMP (raw)", value: analysis.strain.totalTRIMP.formatted(.number.precision(.fractionLength(1))))
+
+            if !analysis.strain.zoneBreakdownMinutes.isEmpty {
+                HeartRateZoneBreakdownView(breakdown: analysis.strain.zoneBreakdownMinutes)
+            }
+
+            Divider().padding(.vertical, 2)
+
             if let rhr = analysis.restingHeartRate {
                 MetricRow(label: "Resting Heart Rate", value: "\(Int(rhr.rounded())) bpm")
                 if let deviation = analysis.percentageDeviationFromBaseline {
@@ -120,6 +143,44 @@ private struct StrainCard: View {
             } else {
                 PlaceholderRow(text: "No resting heart rate recorded today yet.")
             }
+
+            if !analysis.workouts.isEmpty {
+                Divider().padding(.vertical, 2)
+                MetricRow(label: "Workouts Today", value: "\(analysis.workouts.count)")
+            }
+        }
+    }
+}
+
+private struct HeartRateZoneBreakdownView: View {
+    let breakdown: [HeartRateZone: Double]
+
+    private static let order: [HeartRateZone] = [.zone80to100, .zone60to80, .zone40to60, .zone20to40, .zone0to20]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(Self.order.filter { (breakdown[$0] ?? 0) > 0 }, id: \.self) { zone in
+                HStack {
+                    Text(label(for: zone))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text("\(Int((breakdown[zone] ?? 0).rounded())) min")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.top, 4)
+    }
+
+    private func label(for zone: HeartRateZone) -> String {
+        switch zone {
+        case .zone0to20: "0–20% HRR"
+        case .zone20to40: "20–40% HRR"
+        case .zone40to60: "40–60% HRR"
+        case .zone60to80: "60–80% HRR"
+        case .zone80to100: "80–100% HRR"
         }
     }
 }

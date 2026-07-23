@@ -43,6 +43,19 @@ enum HealthMetricType: String, CaseIterable, Sendable {
     }
 }
 
+// MARK: - Characteristic data
+
+/// From HealthKit's characteristic (profile) data. Used only to pick the
+/// Banister TRIMP exponent constant in the Strain calculation — never to
+/// gate or alter what data is shown to the user.
+enum BiologicalSex: Sendable {
+    case male
+    case female
+    /// Covers HealthKit's `.notSet` and `.other`, and the case where
+    /// characteristic data isn't authorized/available at all.
+    case unspecified
+}
+
 // MARK: - Provenance
 
 /// Which device/app a sample came from. Useful because a single metric
@@ -119,5 +132,26 @@ struct SleepSession: Sendable {
         segments
             .filter { $0.stage == stage }
             .reduce(0) { $0 + $1.duration }
+    }
+}
+
+// MARK: - Workouts
+
+/// A single logged workout. Used to identify which heart-rate samples
+/// reflect exercise rather than unexplained resting-state strain.
+struct Workout: Identifiable, Sendable {
+    let id = UUID()
+    let activityName: String
+    let startDate: Date
+    let endDate: Date
+    /// Active energy burned during the workout, when the source recorded it.
+    /// Not every source (including some Garmin activity types) populates this.
+    let totalActiveEnergyBurned: Double?
+    let source: HealthSource
+
+    var duration: TimeInterval { endDate.timeIntervalSince(startDate) }
+
+    func contains(_ date: Date) -> Bool {
+        date >= startDate && date <= endDate
     }
 }
