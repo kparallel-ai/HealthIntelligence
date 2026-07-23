@@ -111,4 +111,82 @@ final class HealthInsightEngineTests: XCTestCase {
             XCTAssertGreaterThanOrEqual(insights[i - 1].severity, insights[i].severity)
         }
     }
+
+    func test_insightsCarryEvidenceAndSupportingStatesForTheFeedDetailView() {
+        var snapshots: [DailyHealthSnapshot] = []
+        for offset in -59...(-8) {
+            let noise = (offset % 2 == 0) ? 1.0 : -1.0
+            snapshots.append(DailyHealthSnapshot(
+                date: day(offset), restingHeartRate: 60 + noise, sleepDuration: 7.5 * 3600,
+                steps: 8000, activeEnergy: 400, strainScore: nil
+            ))
+        }
+        for (index, value) in [63.0, 65, 67, 69, 71, 73, 75].enumerated() {
+            snapshots.append(DailyHealthSnapshot(
+                date: day(-6 + index), restingHeartRate: value, sleepDuration: 7.5 * 3600,
+                steps: 8000, activeEnergy: 400, strainScore: nil
+            ))
+        }
+
+        let insights = HealthInsightEngine().generateInsights(from: snapshots, referenceDate: referenceDate, calendar: calendar)
+
+        XCTAssertFalse(insights.isEmpty)
+        // Every insight should carry both the always-visible evidence
+        // lines and the fuller supporting-states detail for an expandable
+        // "why am I seeing this" view — never one without the other.
+        for insight in insights {
+            XCTAssertFalse(insight.evidence.isEmpty, "\(insight.title) has no evidence")
+            XCTAssertFalse(insight.supportingStates.isEmpty, "\(insight.title) has no supporting states")
+        }
+    }
+
+    func test_favorableSustainedTrendSurfacesAsItsOwnLowSeverityInsight() {
+        var snapshots: [DailyHealthSnapshot] = []
+        for offset in -59...(-8) {
+            let noise = (offset % 2 == 0) ? 1.0 : -1.0
+            snapshots.append(DailyHealthSnapshot(
+                date: day(offset), restingHeartRate: 65 + noise, sleepDuration: 7.5 * 3600,
+                steps: 8000, activeEnergy: 400, strainScore: nil
+            ))
+        }
+        // Recent week: RHR falls steadily — favorable direction (lower RHR
+        // is the "good" direction), should read as reassurance, not alarm.
+        for (index, value) in [64.0, 62, 60, 58, 56, 54, 52].enumerated() {
+            snapshots.append(DailyHealthSnapshot(
+                date: day(-6 + index), restingHeartRate: value, sleepDuration: 7.5 * 3600,
+                steps: 8000, activeEnergy: 400, strainScore: nil
+            ))
+        }
+
+        let insights = HealthInsightEngine().generateInsights(from: snapshots, referenceDate: referenceDate, calendar: calendar)
+
+        let trendInsight = insights.first { $0.title.localizedCaseInsensitiveContains("trending downward") }
+        XCTAssertNotNil(trendInsight, "A favorable, sustained RHR decline should surface as its own insight")
+        XCTAssertEqual(trendInsight?.severity, .info, "A favorable trend shouldn't be presented as a concern")
+    }
+
+    func test_baselineDeviationHeadlineUsesNaturalPossessiveDayPhrasing() {
+        var snapshots: [DailyHealthSnapshot] = []
+        for offset in -59...(-1) {
+            // A little real variance so the baseline has a nonzero SD — a
+            // perfectly flat history makes zScore() return nil, which
+            // silently suppresses the baseline-deviation signal.
+            let noise = (offset % 2 == 0) ? 1.0 : -1.0
+            snapshots.append(DailyHealthSnapshot(
+                date: day(offset), restingHeartRate: 60 + noise, sleepDuration: 7.5 * 3600,
+                steps: 8000, activeEnergy: 400, strainScore: nil
+            ))
+        }
+        // Only today is a spike, and today has no reliable trend history of
+        // its own, so this should read as a plain baseline-deviation
+        // headline: "Today's resting heart rate was unusually high for you."
+        snapshots.append(DailyHealthSnapshot(
+            date: day(0), restingHeartRate: 90, sleepDuration: 7.5 * 3600,
+            steps: 8000, activeEnergy: 400, strainScore: nil
+        ))
+
+        let insights = HealthInsightEngine().generateInsights(from: snapshots, referenceDate: referenceDate, calendar: calendar)
+
+        XCTAssertTrue(insights.contains { $0.title.hasPrefix("Today's") }, "Expected a \"Today's ...\" headline, got: \(insights.map(\.title))")
+    }
 }

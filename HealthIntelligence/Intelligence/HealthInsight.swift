@@ -102,12 +102,27 @@ import Foundation
 
 struct HealthInsight: Identifiable, Sendable {
     let id = UUID()
+    /// A short, natural, personal headline — e.g. "Yesterday's strain was
+    /// unusually high for you." Meant to stand alone in a feed.
     let title: String
+    /// One or two sentences on what was actually detected.
     let narrative: String
+    /// Short, always-visible facts backing the headline (e.g. "Resting
+    /// Heart Rate: 62 bpm (+2.1σ vs. your baseline of 54 bpm)") — distinct
+    /// from `supportingStates`, which is the full detail behind an
+    /// expandable "why am I seeing this" disclosure.
+    let evidence: [String]
     let severity: SignalSeverity
     let confidence: Double
     let date: Date
     let supportingPatterns: [HealthPattern]
+    let supportingSignals: [HealthSignal]
+
+    /// Every MetricState behind this insight, for a "why am I seeing this"
+    /// detail view — current value, personal baseline, deviation, trend.
+    var supportingStates: [MetricState] {
+        supportingSignals.flatMap(\.supportingStates)
+    }
 }
 
 struct HealthInsightEngine {
@@ -188,8 +203,16 @@ struct HealthInsightEngine {
             patterns.append(bouncePattern)
         }
 
-        return Self.insights(from: patterns, standaloneSignals: signals)
-            .sorted { $0.severity > $1.severity }
+        return Self.insights(from: patterns, standaloneSignals: signals, referenceDate: referenceDate, calendar: calendar)
+            .sorted { lhs, rhs in
+                // Prioritized by severity, then confidence, then recency —
+                // "relevance" isn't a separate computed axis (there's no
+                // fourth number to base it on without inventing one); it's
+                // expressed through these three, in this order.
+                if lhs.severity != rhs.severity { return lhs.severity > rhs.severity }
+                if lhs.confidence != rhs.confidence { return lhs.confidence > rhs.confidence }
+                return lhs.date > rhs.date
+            }
     }
 
     // MARK: - Series construction
@@ -214,29 +237,42 @@ struct HealthInsightEngine {
 
     // MARK: - Insight phrasing
 
-    private static func insights(from patterns: [HealthPattern], standaloneSignals: [HealthSignal]) -> [HealthInsight] {
+    private static func insights(
+        from patterns: [HealthPattern],
+        standaloneSignals: [HealthSignal],
+        referenceDate: Date,
+        calendar: Calendar
+    ) -> [HealthInsight] {
         var results: [HealthInsight] = patterns.map { pattern in
             HealthInsight(
                 title: title(for: pattern.kind),
                 narrative: pattern.explanation,
+                evidence: evidenceLines(for: pattern.signals.flatMap(\.supportingStates)),
                 severity: pattern.severity,
                 confidence: pattern.confidence,
                 date: pattern.date,
-                supportingPatterns: [pattern]
+                supportingPatterns: [pattern],
+                supportingSignals: pattern.signals
             )
         }
 
-        // Baseline-deviation signals not already folded into a pattern
-        // above still deserve their own insight.
+        // Baseline-deviation and sustained-trend signals not already folded
+        // into a pattern above still deserve their own insight — this is
+        // also how a purely positive result (a favorable sustained trend,
+        // or nothing abnormal at all) is able to surface as reassurance
+        // rather than the feed going silent.
         let patternedSignalIDs = Set(patterns.flatMap { $0.signals.map(\.id) })
-        for signal in standaloneSignals where signal.kind == .baselineDeviation && !patternedSignalIDs.contains(signal.id) {
+        for signal in standaloneSignals
+        where (signal.kind == .baselineDeviation || signal.kind == .sustainedTrend) && !patternedSignalIDs.contains(signal.id) {
             results.append(HealthInsight(
-                title: "\(signal.supportingStates.first?.metric.displayName ?? "A metric") looks different than usual",
+                title: standaloneTitle(for: signal, referenceDate: referenceDate, calendar: calendar),
                 narrative: signal.explanation,
+                evidence: evidenceLines(for: signal.supportingStates),
                 severity: signal.severity,
                 confidence: signal.confidence,
                 date: signal.date,
-                supportingPatterns: []
+                supportingPatterns: [],
+                supportingSignals: [signal]
             ))
         }
 
@@ -245,10 +281,59 @@ struct HealthInsightEngine {
 
     private static func title(for kind: HealthPatternKind) -> String {
         switch kind {
-        case .emergingDeterioration: "Multiple metrics trending unfavorably"
-        case .recoveryDebt: "Recovery may be lagging behind recent strain"
-        case .unusualPhysiologicalLoad: "Unexplained physiological load"
-        case .bounceBack: "Back to your normal"
+        case .emergingDeterioration: "Several of your metrics are trending the wrong way"
+        case .recoveryDebt: "Your recovery may be falling behind your recent workload"
+        case .unusualPhysiologicalLoad: "Your body seems more taxed than usual today"
+        case .bounceBack: "Your metrics have returned to your normal range"
+        }
+    }
+
+    /// A short, personal headline for a standalone (not pattern-grouped)
+    /// signal — e.g. "Yesterday's strain was unusually high for you" or
+    /// "Your resting heart rate is trending upward."
+    private static func standaloneTitle(for signal: HealthSignal, referenceDate: Date, calendar: Calendar) -> String {
+        guard let state = signal.supportingStates.last else { return "Something worth a look" }
+        let metricName = state.metric.displayName
+
+        switch signal.kind {
+        case .baselineDeviation:
+            guard let deviation = state.deviation else { return "\(metricName) looks different than usual" }
+            let day = possessiveDayWord(for: state.date, referenceDate: referenceDate, calendar: calendar)
+            let direction = deviation > 0 ? "high" : "low"
+            return "\(day) \(metricName.lowercased()) was unusually \(direction) for you"
+        case .sustainedTrend:
+            guard let trend = state.trend else { return "\(metricName) has been changing" }
+            let directionWord = trend.direction == .rising ? "trending upward" : "trending downward"
+            return "Your \(metricName.lowercased()) is \(directionWord)"
+        case .bounceBack, .unusualPhysiologicalLoad, .recoveryDebt:
+            return metricName
+        }
+    }
+
+    private static func possessiveDayWord(for date: Date, referenceDate: Date, calendar: Calendar) -> String {
+        let dayDiff = calendar.dateComponents(
+            [.day],
+            from: calendar.startOfDay(for: date),
+            to: calendar.startOfDay(for: referenceDate)
+        ).day ?? 0
+
+        switch dayDiff {
+        case 0: return "Today's"
+        case 1: return "Yesterday's"
+        default: return "Recent"
+        }
+    }
+
+    /// Short, always-visible facts for a set of MetricStates — the "key
+    /// evidence" shown directly in the feed, distinct from the full detail
+    /// in the expandable disclosure (which the UI renders straight from
+    /// `HealthInsight.supportingStates`).
+    private static func evidenceLines(for states: [MetricState]) -> [String] {
+        states.compactMap { state in
+            guard let deviation = state.deviation, let baseline = state.baseline else { return nil }
+            let direction = deviation > 0 ? "above" : "below"
+            return "\(state.metric.displayName): \(state.metric.formattedValue(state.currentValue)) "
+                + "(\(String(format: "%.1f", abs(deviation)))\u{03C3} \(direction) your baseline of \(state.metric.formattedValue(baseline.mean)))"
         }
     }
 }

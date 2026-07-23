@@ -2,9 +2,13 @@
 //  DashboardView.swift
 //  HealthIntelligence
 //
-//  Minimal dashboard built around the three future primary dimensions:
-//  Strain, Sleep, Activeness. Shows whatever facts HealthAnalyzer currently
-//  produces; scoring/insight language comes in a later milestone.
+//  Home is intelligence-first: Your Health Today (a simple header) ->
+//  Insights (the 2-4 most important, ranked findings from
+//  HealthInsightEngine, each with an expandable "why am I seeing this")
+//  -> Key Metrics (a compact glance at Strain/Sleep/Activity, demoted from
+//  primary content to a secondary strip). No analysis happens in this
+//  file — it only renders what HealthInsightEngine and HealthAnalyzer
+//  already computed.
 //
 
 import SwiftUI
@@ -15,6 +19,11 @@ struct DashboardView: View {
     @State private var importViewModel: ImportViewModel
     @State private var isImportPresented = false
 
+    /// Keeps the primary feed to a small, deliberately chosen set rather
+    /// than dumping every insight the engine could find — "2-4 most
+    /// important," not "everything."
+    private static let maxFeedInsights = 4
+
     init(viewModel: DashboardViewModel, insightsViewModel: InsightsViewModel, importViewModel: ImportViewModel) {
         _viewModel = State(initialValue: viewModel)
         _insightsViewModel = State(initialValue: insightsViewModel)
@@ -24,15 +33,17 @@ struct DashboardView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 16) {
-                    content
-                    InsightsSection(state: insightsViewModel.state)
+                VStack(alignment: .leading, spacing: 28) {
+                    header
+                    insightsSection
+                    keyMetricsSection
                 }
                 .padding(.horizontal)
                 .padding(.top, 8)
+                .padding(.bottom, 24)
             }
             .background(Color(.systemGroupedBackground))
-            .navigationTitle("Overview")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
@@ -59,302 +70,173 @@ struct DashboardView: View {
         }
     }
 
+    // MARK: - Your Health Today
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("Your Health Today")
+                .font(.largeTitle.weight(.bold))
+            Text(Date().formatted(date: .complete, time: .omitted))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    // MARK: - Insights
+
     @ViewBuilder
-    private var content: some View {
-        switch viewModel.state {
-        case .idle, .loading:
-            loadingView
-        case .ready(let data):
-            VStack(spacing: 16) {
-                StrainCard(analysis: data.strain)
-                SleepCard(analysis: data.sleep)
-                ActivityCard(analysis: data.activity)
-            }
-        case .noData:
-            statusView(
-                symbol: "heart.text.square",
-                title: "No Health Data Found",
-                message: "Make sure Health access is granted for this app in Settings, and that your Garmin has synced recent data to Apple Health."
-            )
-        case .error(let message):
-            statusView(symbol: "exclamationmark.triangle", title: "Something Went Wrong", message: message)
-        }
-    }
-
-    private var loadingView: some View {
-        VStack(spacing: 12) {
-            ProgressView()
-            Text("Reading Health data…")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 120)
-    }
-
-    private func statusView(symbol: String, title: String, message: String) -> some View {
-        VStack(spacing: 12) {
-            Image(systemName: symbol)
-                .font(.system(size: 40))
-                .foregroundStyle(.secondary)
-            Text(title)
+    private var insightsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Insights")
                 .font(.headline)
-            Text(message)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-            Button("Try Again") { Task { await viewModel.load() } }
-                .buttonStyle(.bordered)
-                .padding(.top, 4)
+                .padding(.horizontal, 4)
+
+            switch insightsViewModel.state {
+            case .idle, .loading:
+                PlaceholderCard(symbol: "sparkles") {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                        Text("Looking for what matters in your data…")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            case .buildingBaseline:
+                PlaceholderCard(symbol: "chart.line.uptrend.xyaxis") {
+                    Text("Insights need at least \(MetricBaseline.minimumReliableSampleCount) days of Health history — check back soon.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            case .ready(let insights) where insights.isEmpty:
+                PlaceholderCard(symbol: "checkmark.circle") {
+                    Text("Nothing stands out from your recent baseline.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            case .ready(let insights):
+                VStack(spacing: 12) {
+                    ForEach(Array(insights.prefix(Self.maxFeedInsights))) { insight in
+                        InsightFeedCard(insight: insight)
+                    }
+                }
+            case .error(let message):
+                PlaceholderCard(symbol: "exclamationmark.triangle") {
+                    Text(message)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
-        .frame(maxWidth: .infinity)
-        .padding(24)
+    }
+
+    // MARK: - Key Metrics
+
+    @ViewBuilder
+    private var keyMetricsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Key Metrics")
+                .font(.headline)
+                .padding(.horizontal, 4)
+
+            switch viewModel.state {
+            case .idle, .loading:
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 20)
+            case .ready(let data):
+                KeyMetricsRow(data: data)
+            case .noData:
+                Text("No Health data found yet. Make sure Health access is granted in Settings.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 4)
+            case .error(let message):
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Button("Try Again") { Task { await viewModel.load() } }
+                        .font(.caption)
+                }
+                .padding(.horizontal, 4)
+            }
+        }
     }
 }
 
-// MARK: - Dimension cards
+// MARK: - Shared containers
 
-private struct DimensionCard<Content: View>: View {
-    let title: String
+private struct PlaceholderCard<Content: View>: View {
     let symbol: String
-    let tint: Color
     @ViewBuilder var content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label(title, systemImage: symbol)
-                .font(.headline)
-                .foregroundStyle(tint)
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: symbol)
+                .foregroundStyle(.secondary)
+                .frame(width: 20)
             content
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
         .background(.background, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+}
+
+// MARK: - Insight feed card
+
+private struct InsightFeedCard: View {
+    let insight: HealthInsight
+    @State private var isExpanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                Circle()
+                    .fill(severityColor)
+                    .frame(width: 8, height: 8)
+                    .padding(.top, 6)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(insight.title)
+                        .font(.headline)
+                    Text(insight.narrative)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if !insight.evidence.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(insight.evidence, id: \.self) { line in
+                        Text(line)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.leading, 18)
+            }
+
+            if !insight.supportingStates.isEmpty {
+                DisclosureGroup("Why am I seeing this?", isExpanded: $isExpanded) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(Array(insight.supportingStates.enumerated()), id: \.offset) { _, state in
+                            MetricStateRow(state: state)
+                        }
+                    }
+                    .padding(.top, 8)
+                    .padding(.leading, 18)
+                }
+                .font(.caption.weight(.medium))
+                .tint(.secondary)
+            }
+        }
+        .padding(16)
+        .background(.background, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .shadow(color: .black.opacity(0.05), radius: 8, y: 4)
     }
-}
 
-private struct StrainCard: View {
-    let analysis: StrainAnalysis
-
-    var body: some View {
-        DimensionCard(title: "Strain", symbol: "bolt.heart", tint: .orange) {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(analysis.strain.strainScore, format: .number.precision(.fractionLength(1)))
-                    .font(.system(size: 34, weight: .bold, design: .rounded))
-                Text("/ 100")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                if analysis.strain.confidence == .low {
-                    Text("Low Confidence")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.orange)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(.orange.opacity(0.15), in: Capsule())
-                }
-            }
-            MetricRow(label: "Total TRIMP (raw)", value: analysis.strain.totalTRIMP.formatted(.number.precision(.fractionLength(1))))
-
-            if !analysis.strain.zoneBreakdownMinutes.isEmpty {
-                HeartRateZoneBreakdownView(breakdown: analysis.strain.zoneBreakdownMinutes)
-            }
-
-            Divider().padding(.vertical, 2)
-
-            if let rhr = analysis.restingHeartRate {
-                MetricRow(label: "Resting Heart Rate", value: "\(Int(rhr.rounded())) bpm")
-                if let deviation = analysis.percentageDeviationFromBaseline {
-                    DeviationRow(deviation: deviation, unit: "vs. 30-day baseline")
-                } else {
-                    PlaceholderRow(text: "Building your baseline — check back in a few days.")
-                }
-            } else {
-                PlaceholderRow(text: "No resting heart rate recorded today yet.")
-            }
-
-            if !analysis.workouts.isEmpty {
-                Divider().padding(.vertical, 2)
-                MetricRow(label: "Workouts Today", value: "\(analysis.workouts.count)")
-            }
-        }
-    }
-}
-
-private struct HeartRateZoneBreakdownView: View {
-    let breakdown: [HeartRateZone: Double]
-
-    private static let order: [HeartRateZone] = [.zone80to100, .zone60to80, .zone40to60, .zone20to40, .zone0to20]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            ForEach(Self.order.filter { (breakdown[$0] ?? 0) > 0 }, id: \.self) { zone in
-                HStack {
-                    Text(label(for: zone))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Text("\(Int((breakdown[zone] ?? 0).rounded())) min")
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-        .padding(.top, 4)
-    }
-
-    private func label(for zone: HeartRateZone) -> String {
-        switch zone {
-        case .zone0to20: "0–20% HRR"
-        case .zone20to40: "20–40% HRR"
-        case .zone40to60: "40–60% HRR"
-        case .zone60to80: "60–80% HRR"
-        case .zone80to100: "80–100% HRR"
-        }
-    }
-}
-
-private struct SleepCard: View {
-    let analysis: SleepAnalysis
-
-    var body: some View {
-        DimensionCard(title: "Sleep", symbol: "moon.zzz", tint: .indigo) {
-            if let asleep = analysis.totalTimeAsleep, asleep > 0 {
-                MetricRow(label: "Time Asleep", value: Self.formatted(asleep))
-                if let inBed = analysis.totalTimeInBed {
-                    MetricRow(label: "Time in Bed", value: Self.formatted(inBed))
-                }
-                if !analysis.stageBreakdown.isEmpty {
-                    SleepStageBreakdownView(breakdown: analysis.stageBreakdown)
-                }
-            } else {
-                PlaceholderRow(text: "No sleep data found for last night.")
-            }
-        }
-    }
-
-    private static func formatted(_ interval: TimeInterval) -> String {
-        let hours = Int(interval) / 3600
-        let minutes = (Int(interval) % 3600) / 60
-        return "\(hours)h \(minutes)m"
-    }
-}
-
-private struct SleepStageBreakdownView: View {
-    let breakdown: [SleepStage: TimeInterval]
-
-    private static let order: [SleepStage] = [.rem, .core, .deep, .awake, .unspecified, .inBed]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            ForEach(Self.order.filter { breakdown[$0] != nil }, id: \.self) { stage in
-                if let duration = breakdown[stage] {
-                    HStack {
-                        Text(label(for: stage))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Text("\(Int(duration / 60)) min")
-                            .font(.caption.monospacedDigit())
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-        }
-        .padding(.top, 4)
-    }
-
-    private func label(for stage: SleepStage) -> String {
-        switch stage {
-        case .inBed: "In Bed"
-        case .awake: "Awake"
-        case .core: "Core"
-        case .deep: "Deep"
-        case .rem: "REM"
-        case .unspecified: "Asleep"
-        }
-    }
-}
-
-private struct ActivityCard: View {
-    let analysis: ActivityAnalysis
-
-    var body: some View {
-        DimensionCard(title: "Activeness", symbol: "figure.walk", tint: .green) {
-            MetricRow(label: "Steps Today", value: "\(Int(analysis.totalStepsToday))")
-            if analysis.totalActiveEnergyToday > 0 {
-                MetricRow(label: "Active Energy", value: "\(Int(analysis.totalActiveEnergyToday)) kcal")
-            }
-            if let deviation = analysis.percentageDeviationFromBaseline {
-                DeviationRow(deviation: deviation, unit: "vs. 30-day baseline")
-            } else {
-                PlaceholderRow(text: "Building your baseline — check back in a few days.")
-            }
-        }
-    }
-}
-
-// MARK: - Insights
-
-private struct InsightsSection: View {
-    let state: InsightsViewModel.State
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Insights")
-                .font(.headline)
-                .padding(.horizontal, 4)
-
-            switch state {
-            case .idle, .loading:
-                DimensionCard(title: "Analyzing", symbol: "sparkles", tint: .purple) {
-                    HStack(spacing: 8) {
-                        ProgressView()
-                        Text("Looking for patterns in your recent history…")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            case .buildingBaseline:
-                DimensionCard(title: "Building Your Baseline", symbol: "chart.line.uptrend.xyaxis", tint: .purple) {
-                    PlaceholderRow(text: "Insights need at least \(MetricBaseline.minimumReliableSampleCount) days of Health history — check back soon.")
-                }
-            case .ready(let insights) where insights.isEmpty:
-                DimensionCard(title: "All Normal", symbol: "checkmark.circle", tint: .purple) {
-                    PlaceholderRow(text: "Nothing stands out from your recent baseline.")
-                }
-            case .ready(let insights):
-                ForEach(insights) { insight in
-                    InsightCard(insight: insight)
-                }
-            case .error(let message):
-                DimensionCard(title: "Insights Unavailable", symbol: "exclamationmark.triangle", tint: .purple) {
-                    PlaceholderRow(text: message)
-                }
-            }
-        }
-    }
-}
-
-private struct InsightCard: View {
-    let insight: HealthInsight
-
-    var body: some View {
-        DimensionCard(title: insight.title, symbol: "sparkles", tint: tint(for: insight.severity)) {
-            Text(insight.narrative)
-                .font(.subheadline)
-            HStack {
-                Text(insight.severity.label)
-                Spacer()
-                Text("\(Int((insight.confidence * 100).rounded()))% confidence")
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        }
-    }
-
-    private func tint(for severity: SignalSeverity) -> Color {
-        switch severity {
+    private var severityColor: Color {
+        switch insight.severity {
         case .info: .blue
         case .mild: .yellow
         case .moderate: .orange
@@ -363,45 +245,110 @@ private struct InsightCard: View {
     }
 }
 
-// MARK: - Shared row views
+private struct MetricStateRow: View {
+    let state: MetricState
 
-private struct MetricRow: View {
-    let label: String
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack {
+                Text(state.metric.displayName)
+                    .font(.caption.weight(.semibold))
+                Spacer()
+                Text(state.metric.formattedValue(state.currentValue))
+                    .font(.caption.monospacedDigit())
+            }
+
+            HStack(spacing: 10) {
+                if let baseline = state.baseline {
+                    Text("Baseline \(state.metric.formattedValue(baseline.mean))")
+                }
+                if let deviation = state.deviation {
+                    Text("\(deviation >= 0 ? "+" : "")\(String(format: "%.1f", deviation))\u{03C3}")
+                }
+                if let trend = state.trend, trend.isSustained {
+                    Label(
+                        trend.direction == .rising ? "Rising" : "Falling",
+                        systemImage: trend.direction == .rising ? "arrow.up.right" : "arrow.down.right"
+                    )
+                }
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+        }
+    }
+}
+
+// MARK: - Key Metrics row
+
+private struct KeyMetricsRow: View {
+    let data: DashboardViewModel.DashboardData
+
+    var body: some View {
+        HStack(spacing: 12) {
+            KeyMetricTile(
+                symbol: "bolt.heart",
+                tint: .orange,
+                value: data.strain.strain.strainScore.formatted(.number.precision(.fractionLength(0))),
+                label: "Strain",
+                deviation: nil
+            )
+            KeyMetricTile(
+                symbol: "moon.zzz",
+                tint: .indigo,
+                value: Self.sleepValue(data.sleep),
+                label: "Sleep",
+                deviation: nil
+            )
+            KeyMetricTile(
+                symbol: "figure.walk",
+                tint: .green,
+                value: "\(Int(data.activity.totalStepsToday))",
+                label: "Steps",
+                deviation: data.activity.percentageDeviationFromBaseline
+            )
+        }
+    }
+
+    private static func sleepValue(_ sleep: SleepAnalysis) -> String {
+        guard let asleep = sleep.totalTimeAsleep, asleep > 0 else { return "–" }
+        let hours = Int(asleep) / 3600
+        let minutes = (Int(asleep) % 3600) / 60
+        return "\(hours)h \(minutes)m"
+    }
+}
+
+private struct KeyMetricTile: View {
+    let symbol: String
+    let tint: Color
     let value: String
+    let label: String
+    let deviation: Double?
 
     var body: some View {
-        HStack {
-            Text(label)
+        VStack(spacing: 6) {
+            Image(systemName: symbol)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
-            Spacer()
+                .foregroundStyle(tint)
             Text(value)
-                .font(.subheadline.weight(.semibold).monospacedDigit())
+                .font(.title3.weight(.semibold))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            if let deviation {
+                HStack(spacing: 2) {
+                    Image(systemName: deviation >= 0 ? "arrow.up.right" : "arrow.down.right")
+                    Text("\(Int(abs(deviation)))%")
+                }
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+            }
         }
-    }
-}
-
-private struct DeviationRow: View {
-    let deviation: Double
-    let unit: String
-
-    var body: some View {
-        HStack {
-            Image(systemName: deviation >= 0 ? "arrow.up.right" : "arrow.down.right")
-            Text("\(deviation >= 0 ? "+" : "")\(deviation, specifier: "%.0f")% \(unit)")
-        }
-        .font(.caption)
-        .foregroundStyle(.secondary)
-    }
-}
-
-private struct PlaceholderRow: View {
-    let text: String
-
-    var body: some View {
-        Text(text)
-            .font(.caption)
-            .foregroundStyle(.tertiary)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 14)
+        .background(.background, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 }
 

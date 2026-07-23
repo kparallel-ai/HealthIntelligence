@@ -49,6 +49,25 @@ enum IntelligenceMetric: String, CaseIterable, Sendable {
         case .sleepDuration, .steps, .activeEnergy: .falling
         }
     }
+
+    /// A human-readable rendering of a raw value for this metric. Shared by
+    /// the insight engine (evidence strings) and the UI (the "why am I
+    /// seeing this" detail view) so the two never drift out of sync.
+    func formattedValue(_ value: Double) -> String {
+        switch self {
+        case .sleepDuration:
+            let totalMinutes = Int(value / 60)
+            return "\(totalMinutes / 60)h \(totalMinutes % 60)m"
+        case .restingHeartRate:
+            return "\(Int(value.rounded())) bpm"
+        case .strainScore:
+            return String(format: "%.1f", value)
+        case .steps:
+            return "\(Int(value.rounded())) steps"
+        case .activeEnergy:
+            return "\(Int(value.rounded())) kcal"
+        }
+    }
 }
 
 enum TrendDirection: Sendable {
